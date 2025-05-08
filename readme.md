@@ -142,10 +142,10 @@ You can also use a **testing config** with very short intervals for rapid testin
 
 ## Requirements
 
-- Python 3
-- PyQt5
-- desktop-notify (for Linux desktop notifications)
-- Linux desktop environment with notification support
+- Python 3.8 or higher
+- PyQt5 5.15.0 or higher
+- desktop-notify 1.3.3 or higher
+- Linux desktop environment with notification support (DBus)
 
 ## Contributing
 
