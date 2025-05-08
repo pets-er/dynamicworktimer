@@ -1,0 +1,9 @@
+{
+    "work_phases": [10, 15, 20],
+    "breaks": [5, 20, 5, 60],
+    "snooze_interval": 5,
+    "max_snoozes": 3,
+    "daily_sessions": 4,
+    "popup_autoconfirm_seconds": 10,
+    "popup_warning_seconds": 5
+}

@@ -1,0 +1,10 @@
+{
+    "_comment": "This config is for testing short intervals.",
+    "work_phases": [0.1, 0.1, 0.1, 0.1],
+    "breaks": [0.1, 0.1, 0.1, 0.1],
+    "snooze_interval": 0.1,
+    "max_snoozes": 3,
+    "daily_sessions": 4,
+    "popup_autoconfirm_seconds": 5,
+    "popup_warning_seconds": 2
+}
