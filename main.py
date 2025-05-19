@@ -5,7 +5,8 @@ import asyncio
 import desktop_notify
 from desktop_notify import aio
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox,
+    QCheckBox
 )
 from PyQt5.QtCore import QTimer, Qt, QEventLoop, pyqtSignal, QObject
 from PyQt5.QtMultimedia import QSound
@@ -72,6 +73,9 @@ class PomodoroTimer(QWidget):
     def __init__(self, config_path):
         super().__init__()
         self.config = load_config(config_path)
+        # Initialize auto-start settings from config before any other initialization
+        self.auto_start_breaks = self.config.get('auto_start_breaks', True)
+        self.auto_start_sessions = self.config.get('auto_start_sessions', True)
         self.init_state()
         self.init_ui()
         self.timer = QTimer()
@@ -156,6 +160,25 @@ class PomodoroTimer(QWidget):
         self.total_timer_label.setAlignment(Qt.AlignCenter)
         self.total_timer_label.setStyleSheet("font-size: 20px;")
         self.layout.addWidget(self.total_timer_label)
+
+        # Add auto-start checkboxes
+        checkbox_layout = QHBoxLayout()
+        self.auto_start_breaks_cb = QCheckBox("Auto-start breaks")
+        self.auto_start_breaks_cb.setChecked(self.auto_start_breaks)
+        self.auto_start_breaks_cb.stateChanged.connect(self.toggle_auto_start_breaks)
+        checkbox_layout.addWidget(self.auto_start_breaks_cb)
+
+        self.auto_start_sessions_cb = QCheckBox("Auto-start sessions")
+        self.auto_start_sessions_cb.setChecked(self.auto_start_sessions)
+        self.auto_start_sessions_cb.stateChanged.connect(self.toggle_auto_start_sessions)
+        checkbox_layout.addWidget(self.auto_start_sessions_cb)
+        self.layout.addLayout(checkbox_layout)
+
+        # Add break time display
+        self.break_time_label = QLabel("Break time: 00:00 / 00:00")
+        self.break_time_label.setAlignment(Qt.AlignCenter)
+        self.break_time_label.setStyleSheet("font-size: 18px;")
+        self.layout.addWidget(self.break_time_label)
 
         # Session selection buttons
         session_label = QLabel("Session:")
@@ -295,7 +318,15 @@ class PomodoroTimer(QWidget):
     def toggle_timer(self):
         if not self.timer.isActive() and not self.paused:
             if self.break_active or self.session_break_active:
-                return  # Don't allow starting work during breaks
+                if not self.auto_start_sessions:
+                    self.start_next_session()
+                return
+            if "Start Break" in self.main_button.text():
+                self.handle_session_break()
+                return
+            if "Start Next Session" in self.main_button.text():
+                self.start_next_session()
+                return
             self.start_phase(self.work_phase)
         elif self.paused:
             self.toggle_pause()
@@ -377,11 +408,20 @@ class PomodoroTimer(QWidget):
                 f" / {self.format_time(self.current_phase_duration)}"
             )
             self.total_timer_label.setText(f"Total: {self.format_time(self.total_work_elapsed)}")
+            # Update break time display
+            self.break_time_label.setText(
+                f"Break time: {self.format_time(self.phase_elapsed)}"
+                f" / {self.format_time(self.current_phase_duration)}"
+            )
             if self.phase_elapsed >= self.current_phase_duration:
                 self.timer.stop()
                 if self.session_break_active:
-                    self.start_next_session()
-                    self.show_notification("Break's over", "New session starting!")
+                    if self.auto_start_sessions:
+                        self.start_next_session()
+                    else:
+                        self.update_main_button("Start Next Session", "blue")
+                        self.play_notification_sound()  # Add sound for manual session start
+                        self.show_notification_sync("Break's over", "Click 'Start Next Session' to begin")
         else:
             self.phase_elapsed += 1
             self.session_elapsed += 1
@@ -392,6 +432,8 @@ class PomodoroTimer(QWidget):
                 f" of {self.format_time(self.current_phase_duration)}!"
             )
             self.total_timer_label.setText(f"Already worked for {self.format_time(self.total_work_elapsed)}! \nKeep it up!")
+            # Clear break time display during work
+            self.break_time_label.setText("Break time: 00:00 / 00:00")
             if self.phase_elapsed >= self.current_phase_duration:
                 self.timer.stop()
                 if self.work_phase + 1 < self.total_phases:
@@ -484,6 +526,7 @@ class PomodoroTimer(QWidget):
         self.current_phase_duration = int(self.breaks[break_idx] * 60)
         self.update_main_button("Break time", "green")
         self.slot_timer_label.setText(f"Break: 00:00 / {self.format_time(self.current_phase_duration)}")
+        self.break_time_label.setText(f"Break time: 00:00 / {self.format_time(self.current_phase_duration)}")
         self.break_sound.play()
         self.show_notification_sync("Session complete", "Break started!")
         self.timer.start(1000)
@@ -500,6 +543,7 @@ class PomodoroTimer(QWidget):
             self.update_main_button("All sessions complete!", "gray")
             self.slot_timer_label.setText("Done!")
             self.total_timer_label.setText(f"Total: {self.format_time(self.total_work_elapsed)}")
+            self.break_time_label.setText("Break time: 00:00 / 00:00")
             self.show_notification_sync("Pomodoro Finished", "All sessions complete!")
             return
         self.work_phase = 0
@@ -518,7 +562,7 @@ class PomodoroTimer(QWidget):
         self.highlight_selection()
         self.update_main_button("Working...", "purple")
         self.update_timers()
-        self.notification_sound.play()  # Play pling sound for new session
+        self.notification_sound.play()
         self.show_notification_sync("Break's Over", "Break's over, back to work. Session starting now!")
         self.start_phase(self.work_phase)  # Autostart next session!
 
@@ -564,7 +608,11 @@ class PomodoroTimer(QWidget):
         if self.snooze_count < self.max_snoozes:
             self.show_snooze_dialog()
         else:
-            self.handle_session_break()
+            if self.auto_start_breaks:
+                self.handle_session_break()
+            else:
+                self.update_main_button("Start Break", "blue")
+                self.show_notification_sync("Session complete", "Click 'Start Break' to begin break")
 
     def start_snooze(self):
         """Start an extended work period"""
@@ -583,6 +631,12 @@ class PomodoroTimer(QWidget):
             f"Starting {self.snooze_interval} minutes of extended work",
             timeout=3000  # 3 seconds
         )
+
+    def toggle_auto_start_breaks(self, state):
+        self.auto_start_breaks = bool(state)
+
+    def toggle_auto_start_sessions(self, state):
+        self.auto_start_sessions = bool(state)
 
 if __name__ == "__main__":
     args = parse_args()

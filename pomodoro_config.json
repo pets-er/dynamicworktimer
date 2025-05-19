@@ -5,5 +5,7 @@
     "max_snoozes": 3,
     "daily_sessions": 4,
     "popup_autoconfirm_seconds": 10,
-    "popup_warning_seconds": 5
+    "popup_warning_seconds": 5,
+    "auto_start_breaks": true,
+    "auto_start_sessions": false
 }
